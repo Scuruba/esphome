@@ -223,13 +223,19 @@ SETTING_MAP = {
 
 
 async def to_code(config: ConfigType) -> None:
-    var = await i2c.new_i2c_component(config)
+    if hasattr(i2c, "new_i2c_component"):
+        var = await i2c.new_i2c_component(config)
+    else:
+        var = cg.new_Pvariable(config[CONF_ID])
+        await cg.register_component(var, config)
+        await i2c.register_i2c_device(var, config)
 
     for key, funcName in SETTING_MAP.items():
         if cfg := config.get(key):
             cg.add(getattr(var, funcName)(cfg))
 
-    cg.add_optional(var.set_model, config.get(CONF_MODEL))
+    if model := config.get(CONF_MODEL):
+        cg.add(var.set_model(model))
 
     for key, funcName in SENSOR_MAP.items():
         if cfg := config.get(key):
@@ -281,7 +287,6 @@ automation.register_apply_action(
 )
 
 
-# Custom fork actions use the same ApplyCall mechanism as the upstream fan action.
 automation.register_apply_action(
     "sen5x.start_restart",
     SEN5X_ACTION_SCHEMA,
