@@ -66,7 +66,11 @@ ACCELERATION_MODES = {
     "high": RhtAccelerationMode.HIGH_ACCELERATION,
 }
 
-MODELS = Sen5xType.options("SEN50", "SEN54", "SEN55")
+MODELS = {
+    "SEN50": Sen5xType.SEN50,
+    "SEN54": Sen5xType.SEN54,
+    "SEN55": Sen5xType.SEN55,
+}
 
 
 def _gas_sensor(
