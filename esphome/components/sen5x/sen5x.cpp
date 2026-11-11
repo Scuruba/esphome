@@ -9,6 +9,15 @@ namespace esphome::sen5x {
 
 ESPHOME_LOG_TAG(TAG, "sen5x");
 
+#ifndef PUBLISH_STATE
+#define PUBLISH_STATE(sens, val) \
+  do { \
+    if ((sens) != nullptr) { \
+      (sens)->publish_state(val); \
+    } \
+  } while (0)
+#endif
+
 static const uint16_t SEN5X_CMD_AUTO_CLEANING_INTERVAL = 0x8004;
 static const uint16_t SEN5X_CMD_GET_DATA_READY_STATUS = 0x0202;
 static const uint16_t SEN5X_CMD_GET_FIRMWARE_VERSION = 0xD100;
@@ -60,21 +69,26 @@ void SEN5XComponent::setup() {
   // the sensor needs 1000 ms to enter the idle state
   this->set_timeout(1000, [this]() {
     // Check if measurement is ready before reading the value
-    if (!this->setup_check(this->write_command(SEN5X_CMD_GET_DATA_READY_STATUS),
-                           LOG_STR("Failed to write data ready status command")))
+    if (!this->write_command(SEN5X_CMD_GET_DATA_READY_STATUS)) {
+      this->mark_failed(LOG_STR("Failed to write data ready status command"));
       return;
+    }
     delay(20);  // per datasheet
 
     uint16_t raw_read_status;
-    if (!this->setup_check(this->read_data(raw_read_status), LOG_STR("Failed to read data ready status")))
+    if (!this->read_data(raw_read_status)) {
+      this->mark_failed(LOG_STR("Failed to read data ready status"));
       return;
+    }
 
     uint32_t stop_measurement_delay = 0;
     // In order to query the device periodic measurement must be ceased
     if (raw_read_status) {
       ESP_LOGD(TAG, "Data is available; stopping periodic measurement");
-      if (!this->setup_check(this->write_command(SEN5X_CMD_STOP_MEASUREMENTS), LOG_STR("Failed to stop measurements")))
+      if (!this->write_command(SEN5X_CMD_STOP_MEASUREMENTS)) {
+        this->mark_failed(LOG_STR("Failed to stop measurements"));
         return;
+      }
       // According to the SEN5x datasheet the sensor will only respond to other commands after waiting 200 ms after
       // issuing the stop_periodic_measurement command
       stop_measurement_delay = 200;
@@ -83,9 +97,10 @@ void SEN5XComponent::setup() {
       // note: serial number register is actually 32-bytes long but we grab only the first 16-bytes,
       // this appears to be all that Sensirion uses for serial numbers, this could change
       uint16_t raw_serial_number[8];
-      if (!this->setup_check(this->get_register(SEN5X_CMD_GET_SERIAL_NUMBER, raw_serial_number, 8, 20),
-                             LOG_STR("Unable to read serial ID")))
+      if (!this->get_register(SEN5X_CMD_GET_SERIAL_NUMBER, raw_serial_number, 8, 20)) {
+        this->mark_failed(LOG_STR("Unable to read serial ID"));
         return;
+      }
       const char *serial_number = sensirion_convert_to_string_in_place(raw_serial_number, 8);
       snprintf(this->serial_number_, sizeof(this->serial_number_), "%s", serial_number);
       ESP_LOGV(TAG, "Serial number %s", this->serial_number_);
@@ -135,9 +150,10 @@ void SEN5XComponent::setup() {
         this->nox_sensor_ = nullptr;  // mark as not used
       }
 
-      if (!this->setup_check(this->get_register(SEN5X_CMD_GET_FIRMWARE_VERSION, this->firmware_version_, 20),
-                             LOG_STR("Unable to read firmware version")))
+      if (!this->get_register(SEN5X_CMD_GET_FIRMWARE_VERSION, this->firmware_version_, 20)) {
+        this->mark_failed(LOG_STR("Unable to read firmware version"));
         return;
+      }
       this->firmware_version_ >>= 8;
       ESP_LOGV(TAG, "Firmware version %d", this->firmware_version_);
 
@@ -174,8 +190,10 @@ void SEN5XComponent::setup() {
       } else {
         result = this->write_command(SEN5X_CMD_RHT_ACCELERATION_MODE);
       }
-      if (!this->setup_check(result, LOG_STR("Failed to set rh/t acceleration mode")))
+      if (!result) {
+        this->mark_failed(LOG_STR("Failed to set rh/t acceleration mode"));
         return;
+      }
       delay(20);
       if (!this->acceleration_mode_.has_value()) {
         uint16_t mode;
@@ -206,8 +224,10 @@ void SEN5XComponent::setup() {
         cmd = SEN5X_CMD_START_MEASUREMENTS;
       }
 
-      if (!this->setup_check(this->write_command(cmd), LOG_STR("Error starting continuous measurements")))
+      if (!this->write_command(cmd)) {
+        this->mark_failed(LOG_STR("Error starting continuous measurements"));
         return;
+      }
       this->initialized_ = true;
     });
   });
